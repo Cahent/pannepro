@@ -1,0 +1,27 @@
+name: Extract Panne-pro source package
+
+on:
+  push:
+    paths:
+      - '.github/workflows/extract-starter.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Unpack project overlay
+        run: |
+          unzip -o Panne-pro-MVP-0.1.zip -d .
+          git add README.md INSTALLATION.md .env.pannepro.example app/ arduino/ bootstrap/ database/ examples/ resources/ routes/
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Import Panne-pro MVP 0.1 source files"
+          git push
