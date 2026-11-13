@@ -1,0 +1,3 @@
+@extends('layout')
+@section('title','Geräteschlüssel')
+@section('content')<div class="card"><h1>Gerät {{$uid}} angelegt</h1><p class="error"><strong>API-Schlüssel jetzt sicher kopieren. Er wird nach Verlassen dieser Seite nicht erneut angezeigt.</strong></p><p style="overflow-wrap:anywhere;background:#0d1c2e;padding:14px;border-radius:8px"><code>{{$token}}</code></p><p>Den Schlüssel in der Arduino-Firmware als <code>API_TOKEN</code> eintragen. Er darf nicht in Git oder öffentlichen Dateien gespeichert werden.</p><a href="{{route('admin.index')}}" class="button">Zurück zur Verwaltung</a></div>@endsection

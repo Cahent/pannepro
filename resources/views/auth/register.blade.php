@@ -1,0 +1,3 @@
+@extends('layout')
+@section('title','Registrierung')
+@section('content')<div class="card" style="max-width:480px;margin:50px auto"><h1>Kundenkonto erstellen</h1><form method="post" action="{{route('register')}}">@csrf<label>Name<input name="name" value="{{old('name')}}" required></label><label>E-Mail<input name="email" type="email" value="{{old('email')}}" required></label><label>Passwort (mind. 12 Zeichen)<input name="password" type="password" minlength="12" required></label><label>Passwort bestätigen<input name="password_confirmation" type="password" minlength="12" required></label><button type="submit">Registrieren</button></form><p class="muted small">Registrierungen erhalten ausschließlich Kundenrechte.</p></div>@endsection
