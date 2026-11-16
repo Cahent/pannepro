@@ -50,8 +50,9 @@ void setup(){
  lastSent=millis();
 }
 void loop(){
- if(touch.getTouchPoints()>0){
-  GDTpoint_t p=touch.touchPoints[0];
+ GDTpoint_t points[5];
+ if(touch.getTouchPoints(points)>0){
+  GDTpoint_t p=points[0];
   if(p.x>=40 && p.x<=760){
    if(p.y>=100 && p.y<195) state="available";
    else if(p.y>=220 && p.y<315) state="busy";
