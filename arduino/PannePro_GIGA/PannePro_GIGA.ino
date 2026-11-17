@@ -1,7 +1,7 @@
 /*
   panne.pro Statusgeber - Arduino GIGA R1 WiFi + GIGA Display Shield
   Display: 800 x 480 (Querformat), Touch: GT911
-  Version 0.2 - Bedienoberflaeche und lokale Statuswahl
+  Version 0.3 - Querformat, lokale Statuswahl und WLAN
 
   Benötigte Bibliotheken:
   - Arduino_GigaDisplay_GFX
@@ -10,6 +10,7 @@
   WICHTIG: Aktuell wird KEIN Status an den Server gesendet.
   TLS / API-Authentifizierung wird separat implementiert.
 */
+#include <WiFi.h>
 #include <Arduino_GigaDisplay_GFX.h>
 #include <Arduino_GigaDisplayTouch.h>
 
@@ -18,6 +19,16 @@ Arduino_GigaDisplayTouch touch;
 
 // Hier die Bezeichnung deines Pannendienst-Fahrzeugs eintragen:
 const char* PS_FAHRZEUG = "PS 01";
+
+// WLAN-Zugangsdaten lokal eintragen, niemals mit echtem Passwort nach GitHub pushen.
+const char* WIFI_SSID = "DEIN_WLAN_NAME";
+const char* WIFI_PASS = "DEIN_WLAN_PASSWORT";
+const uint32_t WIFI_RETRY_MS = 15000;
+const uint32_t WIFI_CHECK_MS = 1000;
+uint32_t lastWifiAttemptMs = 0;
+uint32_t lastWifiCheckMs = 0;
+bool wifiConnected = false;
+bool wifiStarted = false;
 
 enum Status : uint8_t {
   VERFUEGBAR = 0,
@@ -69,6 +80,10 @@ void drawScreen() {
   display.fillScreen(SCHWARZ);
   centeredText("panne.pro Statusgeber", SCREEN_W / 2, 15, 3, WEISS);
   display.drawFastHLine(40, 61, 720, GRAU);
+  display.setTextSize(1);
+  display.setTextColor(wifiConnected ? GRUEN : ROT);
+  display.setCursor(600, 67);
+  display.print(wifiConnected ? "WLAN: Verbunden" : "WLAN: Offline");
 
   for (int i = 0; i < 3; i++) {
     display.fillRoundRect(BTN_X, BTN_Y[i], BTN_W, BTN_H, 12, buttonColor[i]);
@@ -110,6 +125,36 @@ void selectStatus(Status next) {
   // Hier spaeter die authentifizierte HTTPS-API aufrufen.
 }
 
+void updateWiFi() {
+  const uint32_t now = millis();
+  if (now - lastWifiCheckMs < WIFI_CHECK_MS) return;
+  lastWifiCheckMs = now;
+
+  const bool connectedNow = (WiFi.status() == WL_CONNECTED);
+  if (connectedNow != wifiConnected) {
+    wifiConnected = connectedNow;
+    Serial.println(wifiConnected ? "WLAN verbunden." : "WLAN getrennt.");
+    if (wifiConnected) {
+      Serial.print("IP-Adresse: ");
+      Serial.println(WiFi.localIP());
+    }
+    drawScreen();
+  }
+
+  if (!connectedNow && (!wifiStarted || now - lastWifiAttemptMs >= WIFI_RETRY_MS)) {
+    if (strcmp(WIFI_SSID, "DEIN_WLAN_NAME") == 0) {
+      if (!wifiStarted) Serial.println("Bitte WIFI_SSID und WIFI_PASS eintragen.");
+      wifiStarted = true;
+      return;
+    }
+    wifiStarted = true;
+    lastWifiAttemptMs = now;
+    Serial.print("Verbinde WLAN: ");
+    Serial.println(WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   display.begin();
@@ -118,9 +163,11 @@ void setup() {
     Serial.println("FEHLER: Touchcontroller nicht gefunden.");
   }
   drawScreen();
+  updateWiFi();
 }
 
 void loop() {
+  updateWiFi();
   GDTpoint_t points[5];
   const uint8_t count = touch.getTouchPoints(points);
 
