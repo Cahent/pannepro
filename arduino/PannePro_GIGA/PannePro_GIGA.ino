@@ -1,5 +1,5 @@
 /*
- * panne.pro Statusgeber V0.4
+ * panne.pro Statusgeber V0.4.1
  * Arduino GIGA R1 WiFi + GIGA Display Shield, Querformat 800x480
  *
  * Veraenderung erst "Server bestaetigt", wenn die Laravel API
@@ -33,6 +33,15 @@ const uint32_t SEND_RETRY_MS = 15000;
 const uint32_t HEARTBEAT_MS = 60000;
 const uint32_t WIFI_CHECK_MS = 1000;
 const uint32_t HTTP_TIMEOUT_MS = 6500;
+
+// Touch-Zuordnung (bei abweichender Display-Hardware anpassbar):
+// 0: x=rawY, y=479-rawX (bisheriger Wert)
+// 1: x=rawY, y=rawX
+// 2: x=799-rawY, y=rawX
+// 3: x=799-rawY, y=479-rawX
+// 4: x=rawX, y=rawY (Controller liefert bereits Querformat)
+// 5: x=799-rawX, y=479-rawY
+const uint8_t TOUCH_MAPPING = 0;
 
 GigaDisplay_GFX display;
 Arduino_GigaDisplayTouch touch;
@@ -77,26 +86,17 @@ void centeredText(const char* value, int16_t centerX, int16_t topY,
   display.print(value);
 }
 
-void drawScreen() {
-  display.fillScreen(SCHWARZ);
-  centeredText("panne.pro Statusgeber", 400, 15, 3, WEISS);
-  display.drawFastHLine(40, 61, 720, GRAU);
+void drawWifiIndicator() {
+  display.fillRect(588, 63, 172, 15, SCHWARZ);
   display.setTextSize(1);
   display.setTextColor(wifiConnected ? GRUEN : ROT);
   display.setCursor(600, 67);
   display.print(wifiConnected ? "WLAN: Verbunden" : "WLAN: Offline");
+}
 
-  for (int i = 0; i < 3; ++i) {
-    display.fillRoundRect(BTN_X, BTN_Y[i], BTN_W, BTN_H, 12, buttonColor[i]);
-    if (aktuellerStatus == (Status)i) {
-      display.drawRoundRect(BTN_X - 4, BTN_Y[i] - 4,
-                            BTN_W + 8, BTN_H + 8, 15, WEISS);
-      display.drawRoundRect(BTN_X - 3, BTN_Y[i] - 3,
-                            BTN_W + 6, BTN_H + 6, 15, WEISS);
-    }
-    centeredText(labels[i], 400, BTN_Y[i] + 22, 4, WEISS);
-  }
-
+void drawStatusArea() {
+  // Nur die untere Textzeile und die Markierungen aktualisieren.
+  display.fillRect(34, 365, 760, 112, SCHWARZ);
   display.setTextColor(WEISS);
   display.setTextSize(3);
   display.setCursor(40, 376);
@@ -105,7 +105,10 @@ void drawScreen() {
   display.setCursor(40, 410);
   display.print("Aktueller Status: ");
   display.print(textStatus[aktuellerStatus]);
+}
 
+void drawAckArea() {
+  display.fillRect(36, 449, 760, 30, SCHWARZ);
   display.setTextSize(2);
   display.setCursor(40, 451);
   switch (quittung) {
@@ -127,20 +130,52 @@ void drawScreen() {
   }
 }
 
+void drawButton(uint8_t i) {
+  display.fillRoundRect(BTN_X-5, BTN_Y[i]-5, BTN_W+10, BTN_H+10, 15, SCHWARZ);
+  display.fillRoundRect(BTN_X, BTN_Y[i], BTN_W, BTN_H, 12, buttonColor[i]);
+  if (aktuellerStatus == (Status)i) {
+    display.drawRoundRect(BTN_X - 4, BTN_Y[i] - 4,
+                          BTN_W + 8, BTN_H + 8, 15, WEISS);
+    display.drawRoundRect(BTN_X - 3, BTN_Y[i] - 3,
+                          BTN_W + 6, BTN_H + 6, 15, WEISS);
+  }
+  centeredText(labels[i], 400, BTN_Y[i] + 22, 4, WEISS);
+}
+
+void drawScreen() {
+  display.fillScreen(SCHWARZ);
+  centeredText("panne.pro Statusgeber", 400, 15, 3, WEISS);
+  display.drawFastHLine(40, 61, 720, GRAU);
+  drawWifiIndicator();
+  for (int i = 0; i < 3; ++i) drawButton(i);
+  drawStatusArea();
+  drawAckArea();
+}
+
 void touchToLandscape(const GDTpoint_t& p, int16_t& x, int16_t& y) {
-  x = p.y;
-  y = 479 - p.x;
+  switch (TOUCH_MAPPING) {
+    case 1: x = p.y; y = p.x; break;
+    case 2: x = 799 - p.y; y = p.x; break;
+    case 3: x = 799 - p.y; y = 479 - p.x; break;
+    case 4: x = p.x; y = p.y; break;
+    case 5: x = 799 - p.x; y = 479 - p.y; break;
+    default: x = p.y; y = 479 - p.x; break;
+  }
 }
 
 void selectStatus(Status next) {
   if (next == aktuellerStatus && !pendingStatus) return;
+  Status vorherigerStatus = aktuellerStatus;
   aktuellerStatus = next;
   pendingStatus = true;
   quittung = UNBESTAETIGT;
   lastSendAttempt = millis() - SEND_RETRY_MS;
   Serial.print("Gewaehlter Status: ");
   Serial.println(textStatus[aktuellerStatus]);
-  drawScreen();
+  drawButton((uint8_t)vorherigerStatus);
+  drawButton((uint8_t)aktuellerStatus);
+  drawStatusArea();
+  drawAckArea();
 }
 
 void updateWiFi() {
@@ -159,7 +194,8 @@ void updateWiFi() {
       pendingStatus = true; // erst nach erneutem Ack als aktuell bestaetigt
       quittung = FEHLER;
     }
-    drawScreen();
+    drawWifiIndicator();
+    drawAckArea();
   }
 
   if (!connected && (!wifiStarted || now - lastWifiAttempt >= WIFI_RETRY_MS)) {
@@ -255,7 +291,7 @@ void updateServer() {
 
   lastSendAttempt = now;
   quittung = SENDET;
-  drawScreen();
+  drawAckArea();
   bool ok = sendStatus();
   if (ok) {
     pendingStatus = false;
@@ -265,7 +301,7 @@ void updateServer() {
     pendingStatus = true;
     quittung = FEHLER;
   }
-  drawScreen();
+  drawAckArea();
 }
 
 void setup() {
@@ -288,6 +324,14 @@ void loop() {
     lastTouch = millis();
     int16_t x, y;
     touchToLandscape(points[0], x, y);
+    Serial.print("Touch roh: x=");
+    Serial.print(points[0].x);
+    Serial.print(" y=");
+    Serial.print(points[0].y);
+    Serial.print(" | umgerechnet: x=");
+    Serial.print(x);
+    Serial.print(" y=");
+    Serial.println(y);
     if (x >= BTN_X && x < BTN_X + BTN_W) {
       for (int i = 0; i < 3; i++) {
         if (y >= BTN_Y[i] && y < BTN_Y[i] + BTN_H) {
